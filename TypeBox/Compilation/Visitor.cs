@@ -13,7 +13,6 @@ namespace TypeBox.Compilation
 
         public Visitor(IScope scope)
         {
-            
             _scope = scope;
         }
 
@@ -69,7 +68,27 @@ namespace TypeBox.Compilation
 
         public override Expression VisitStatement(TypeBoxParser.StatementContext context)
         {
-            return Visit(context.expressionStatement());
+            if (context.expressionStatement() != null)
+            {
+                return Visit(context.expressionStatement());
+            }
+
+            if (context.compoundStatement() != null)
+            {
+                return Visit(context.compoundStatement());
+            }
+
+            return Visit(context.selectionStatement());
+        }
+
+        public override Expression VisitCompoundStatement(TypeBoxParser.CompoundStatementContext context)
+        {
+            if (context.blockItemList() != null)
+            {
+                return Visit(context.blockItemList());
+            }
+
+            return Expression.Empty();
         }
 
         public override Expression VisitExpressionStatement(TypeBoxParser.ExpressionStatementContext context)
@@ -82,6 +101,17 @@ namespace TypeBox.Compilation
             return Expression.Empty();
         }
 
+        public override Expression VisitSelectionStatement(TypeBoxParser.SelectionStatementContext context)
+        {
+            TypeBoxParser.StatementContext elseStatement = context.statement(1);
+            if (elseStatement != null)
+            {
+                return Expression.IfThenElse(Visit(context.expression()), Visit(context.statement(0)), Visit(elseStatement));
+            }
+
+            return Expression.IfThen(Visit(context.expression()), Visit(context.statement(0)));
+        }
+
         private Type GetTypeFromName(string typeName)
         {
             switch (typeName)
@@ -92,6 +122,8 @@ namespace TypeBox.Compilation
                     return typeof(int);
                 case "float":
                     return typeof(float);
+                case "bool":
+                    return typeof(bool);
             }
 
             return null;

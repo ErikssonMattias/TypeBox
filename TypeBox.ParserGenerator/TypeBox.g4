@@ -158,7 +158,8 @@ typeSpecifier
     |   'int'
     |   'long'
     |   'float'
-    |   'double')
+    |   'double'
+	|   'bool')
     ;
 
 declarator
@@ -184,9 +185,9 @@ initializer
 statement
     :   expressionStatement
 //	labeledStatement
-//    |   compoundStatement
+    |   compoundStatement
 //    |   expressionStatement
-    //|   selectionStatement
+    |   selectionStatement
     //|   iterationStatement
     //|   jumpStatement
     //|   ('__asm' | '__asm__') ('volatile' | '__volatile__') '(' (logicalOrExpression (',' logicalOrExpression)*)? (':' (logicalOrExpression (',' logicalOrExpression)*)?)* ')' ';'
@@ -198,18 +199,18 @@ statement
 //    |   'default' ':' statement
 //    ;
 
-//compoundStatement
-//    :   '{' blockItemList? '}'
-//    ;
+compoundStatement
+    :   '{' blockItemList? '}'
+    ;
 
 expressionStatement
     :   expression? ';'
     ;
 
-//selectionStatement
-//    :   'if' '(' expression ')' statement ('else' statement)?
+selectionStatement
+    :   'if' '(' expression ')' statement ('else' statement)?
 //    |   'switch' '(' expression ')' statement
-//    ;
+    ;
 
 //iterationStatement
 //    :   'while' '(' expression ')' statement

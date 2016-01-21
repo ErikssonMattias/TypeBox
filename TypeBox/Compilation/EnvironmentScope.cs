@@ -44,7 +44,9 @@ namespace TypeBox.Compilation
 
             if (env == null)
             {
-                return null;
+                //return null;
+                // TODO: fix exception classes
+                throw new TypeBoxParseException(new Exception("Can't find the variable"));
             }
 
             return Expression.PropertyOrField(env, key);
@@ -60,7 +62,8 @@ namespace TypeBox.Compilation
 
             if (env == null)
             {
-                return null;
+                //return null;
+                throw new TypeBoxParseException(new Exception("Can't find the function"));
             }
 
             return env.Type.GetMethod(key, typeArray);
