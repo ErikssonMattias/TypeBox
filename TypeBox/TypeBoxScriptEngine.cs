@@ -107,31 +107,73 @@ namespace TypeBox
             }
         }
 
-        public Action<TEnv1> Compile<TEnv1>(string code)
+        public Action Compile(IEnumerable<Type> types, string code)
+        {
+            var globalScope = new EnvironmentScope();
+
+            if (types != null)
+            {
+                globalScope.AddTypes(types);
+            }
+
+            return Expression.Lambda<Action>(CompileInternal(globalScope, code), globalScope.GetParameterExpressionArray()).Compile();
+        }
+
+        public Action<TEnv1> Compile<TEnv1>(IEnumerable<Type> types, string code)
         {
             var globalScope = new EnvironmentScope();
             globalScope.AddEnvironmentParameter(Expression.Parameter(typeof(TEnv1)));
 
+            if (types != null)
+            {
+                globalScope.AddTypes(types);
+            }
+
             return Expression.Lambda<Action<TEnv1>>(CompileInternal(globalScope, code), globalScope.GetParameterExpressionArray()).Compile();
         }
 
-        public Action<TEnv1, TEnv2> Compile<TEnv1, TEnv2>(string code)
+        public Action<TEnv1, TEnv2> Compile<TEnv1, TEnv2>(IEnumerable<Type> types, string code)
         {
             var globalScope = new EnvironmentScope();
             globalScope.AddEnvironmentParameter(Expression.Parameter(typeof(TEnv1)));
             globalScope.AddEnvironmentParameter(Expression.Parameter(typeof(TEnv2)));
 
+            if (types != null)
+            {
+                globalScope.AddTypes(types);
+            }
+
             return Expression.Lambda<Action<TEnv1, TEnv2>>(CompileInternal(globalScope, code), globalScope.GetParameterExpressionArray()).Compile();
         }
 
-        public Action<TEnv1, TEnv2, TEnv3> Compile<TEnv1, TEnv2, TEnv3>(string code)
+        public Action<TEnv1, TEnv2, TEnv3> Compile<TEnv1, TEnv2, TEnv3>(IEnumerable<Type> types, string code)
         {
             var globalScope = new EnvironmentScope();
             globalScope.AddEnvironmentParameter(Expression.Parameter(typeof(TEnv1)));
             globalScope.AddEnvironmentParameter(Expression.Parameter(typeof(TEnv2)));
             globalScope.AddEnvironmentParameter(Expression.Parameter(typeof(TEnv3)));
 
+            if (types != null)
+            {
+                globalScope.AddTypes(types);
+            }
+
             return Expression.Lambda<Action<TEnv1, TEnv2, TEnv3>>(CompileInternal(globalScope, code), globalScope.GetParameterExpressionArray()).Compile();
+        }
+
+        public Action<TEnv1> Compile<TEnv1>(string code)
+        {
+            return Compile<TEnv1>(null, code);
+        }
+
+        public Action<TEnv1, TEnv2> Compile<TEnv1, TEnv2>(string code)
+        {
+            return Compile<TEnv1, TEnv2>(null, code);
+        }
+
+        public Action<TEnv1, TEnv2, TEnv3> Compile<TEnv1, TEnv2, TEnv3>(string code)
+        {
+            return Compile<TEnv1, TEnv2, TEnv3>(null, code);
         }
 
         private class MemoryParserErrorListener : IAntlrErrorListener<IToken>
@@ -148,6 +190,16 @@ namespace TypeBox
             {
                 get { return _messages; }
             }
+        }
+
+        public void Execute(string code)
+        {
+            Compile(null, code)();
+        }
+
+        public void Execute<TEnv1>(string code, TEnv1 environment)
+        {
+            Compile<TEnv1>(code)(environment);
         }
     }
 }

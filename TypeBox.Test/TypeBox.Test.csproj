@@ -45,7 +45,9 @@
     </When>
     <Otherwise>
       <ItemGroup>
-        <Reference Include="Microsoft.VisualStudio.QualityTools.UnitTestFramework" />
+        <Reference Include="Microsoft.VisualStudio.QualityTools.UnitTestFramework">
+          <Private>False</Private>
+        </Reference>
       </ItemGroup>
     </Otherwise>
   </Choose>
@@ -57,6 +59,14 @@
     <Compile Include="CommentTests.cs" />
     <Compile Include="UnaryOperatorTests.cs" />
     <Compile Include="SelectionTests.cs" />
+    <Compile Include="IterationTests.cs" />
+    <Compile Include="ArrayTests.cs" />
+    <Compile Include="CastTests.cs" />
+    <Compile Include="ConversionTests.cs" />
+    <Compile Include="TypesTests.cs" />
+    <Compile Include="FunctionTests.cs" />
+    <Compile Include="EventTests.cs" />
+    <Compile Include="OperationTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\TypeBox\TypeBox.csproj">

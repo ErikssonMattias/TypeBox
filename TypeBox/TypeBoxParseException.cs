@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace TypeBox
 {
-    class TypeBoxParseException : Exception
+    public class TypeBoxParseException : Exception
     {
         private readonly IEnumerable<TypeBoxCompileMessage> _messages;
         private readonly Exception _innerException;
@@ -49,17 +49,17 @@ namespace TypeBox
         }
     }
 
-    class LucCompileException : Exception
+    class TypeBoxCompileException : Exception
     {
-        public LucCompileException()
+        public TypeBoxCompileException()
         {
         }
 
-        public LucCompileException(string message) : base(message)
+        public TypeBoxCompileException(string message) : base(message)
         {
         }
 
-        public LucCompileException(string message, Exception innerException) : base(message, innerException)
+        public TypeBoxCompileException(string message, Exception innerException) : base(message, innerException)
         {
         }
     }

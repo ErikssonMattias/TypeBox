@@ -1,6 +1,6 @@
 ﻿namespace TypeBox
 {
-    class TypeBoxCompileMessage
+    public class TypeBoxCompileMessage
     {
         private readonly int _lineNumber;
         private readonly int _charNumber;

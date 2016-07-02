@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace TypeBox.Test
 {
     [TestClass]
-    public class EnvironmentTests
+    public class CastTests
     {
         private TypeBoxScriptEngine _typeBoxScriptEngine;
 
@@ -15,23 +15,19 @@ namespace TypeBox.Test
         }
 
         [TestMethod]
-        public void EnvironmentAccess()
+        public void NumericCasts()
         {
             DefaultTestEnvironment env = new DefaultTestEnvironment();
 
             var code = _typeBoxScriptEngine.Compile<DefaultTestEnvironment>(@"
-var hej = 2;
-SubEnv.Kalle = 3;
-Result = SubEnv.Kalle + hej;
-SubEnv.SetKalle(hej + 7);
-DoNothing();
+var hej : number;
+hej = 2; // Assign integer to double
+Result = hej; // Assign double to integer
 ");
 
             code(env);
 
-
-            Assert.AreEqual(5, env.Result);
-            Assert.AreEqual(9, env.SubEnv.Kalle);
+            Assert.AreEqual(2, env.Result);
         }
     }
 }

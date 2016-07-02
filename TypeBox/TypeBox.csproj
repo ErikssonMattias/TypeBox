@@ -61,8 +61,13 @@
       <Link>ParserBase\TypeBoxVisitor.cs</Link>
     </Compile>
     <Compile Include="Compilation\EnvironmentScope.cs" />
+    <Compile Include="Compilation\Extensions.cs" />
     <Compile Include="Compilation\ParseTreeExtensions.cs" />
+    <Compile Include="Compilation\TypeBoxSettings.cs" />
+    <Compile Include="Compilation\TypeExtensions.cs" />
     <Compile Include="Compilation\VisitorExpression.cs" />
+    <Compile Include="InternalTypes\EnumerationConverter.cs" />
+    <Compile Include="InternalTypes\TypeBoxArray.cs" />
     <Compile Include="TypeBoxParseException.cs" />
     <Compile Include="TypeBoxCompileMessage.cs" />
     <Compile Include="TypeBoxScriptEngine.cs" />

@@ -12,21 +12,35 @@ block
     : blockItemList
     ;
 
+lambdaExpression
+	: 'function' '(' initDeclaratorList? ')' ':' typeSpecifier compoundStatement
+	| '(' initDeclaratorList? ')' ':' typeSpecifier '=>' compoundStatement
+	;
+
+functionDeclaration
+	: 'function' NAME '(' initDeclaratorList? ')' ':' typeSpecifier compoundStatement
+	;
+
+newExpression
+	:	'new' typeSpecifier '(' argumentExpressionList? ')'
+	;
 
 primaryExpression
     :   NAME
     |   constant
 //    |   StringLiteral+
     |   '(' expression ')'
+	| lambdaExpression
+	| newExpression
     ;
 
 postfixExpression
-    :   primaryExpression
-    |   postfixExpression '[' expression ']'
-    |   postfixExpression '(' argumentExpressionList? ')'
-    |   postfixExpression '.' NAME
-    |   postfixExpression '++'
-    |   postfixExpression '--'
+    :   primaryExpression											# postfixPrimaryExpression
+    |   postfixExpression '[' expression ']'						# arrayPostfixExpression
+    |   postfixExpression '(' argumentExpressionList? ')'			# functionCall
+    |   postfixExpression ('.' | '?.') NAME							# memberAccessExpression
+    |   postfixExpression '++'										# postIncrementExpression
+    |   postfixExpression '--'										# postDecrementExpression
     //|   '(' typeName ')' '{' initializerList '}'
     //|   '(' typeName ')' '{' initializerList ',' '}'
     ;
@@ -133,13 +147,31 @@ expression
     |   expression ',' assignmentExpression
     ;
 
+expressionList
+	: assignmentExpression
+	| expressionList ',' assignmentExpression
+	;
+
+expression2
+	: expression
+	;
+
 constantExpression
     :   conditionalExpression
     ;
 
+variableDeclaration
+	:   'var' initDeclaratorList
+	;
+
 declaration
-    :   typeSpecifier initDeclaratorList? ';'
+    :	variableDeclaration ';'
+	|	functionDeclaration
     ;
+
+singleVariableDeclaration
+	: 'var' declarator (':' typeSpecifier)?
+	;
 
 initDeclaratorList
     :   initDeclarator
@@ -149,9 +181,23 @@ initDeclaratorList
 initDeclarator
     :   declarator
     |   declarator '=' initializer
+	|   declarator ':' typeSpecifier
+	|   declarator ':' typeSpecifier '=' initializer
     ;
 
+
 typeSpecifier
+	: basicType
+	| basicType arraySpecifier
+	| basicType '<' typeSpecifierList '>'
+	;
+
+typeSpecifierList
+	: typeSpecifier
+	| typeSpecifierList ',' typeSpecifier
+	;
+
+basicType
     :   ('void'
     |   'char'
     |   'short'
@@ -159,8 +205,17 @@ typeSpecifier
     |   'long'
     |   'float'
     |   'double'
-	|   'bool')
+	|   'boolean'
+	|   'number'
+	|   'bool'
+	|	'string'
+	|	'Array')
+	|	NAME
     ;
+
+arraySpecifier
+	: '[' ']'
+	;
 
 declarator
     :   NAME
@@ -188,8 +243,8 @@ statement
     |   compoundStatement
 //    |   expressionStatement
     |   selectionStatement
-    //|   iterationStatement
-    //|   jumpStatement
+    |   iterationStatement
+    |   jumpStatement
     //|   ('__asm' | '__asm__') ('volatile' | '__volatile__') '(' (logicalOrExpression (',' logicalOrExpression)*)? (':' (logicalOrExpression (',' logicalOrExpression)*)?)* ')' ';'
     ;
 
@@ -212,20 +267,22 @@ selectionStatement
 //    |   'switch' '(' expression ')' statement
     ;
 
-//iterationStatement
-//    :   'while' '(' expression ')' statement
-//    |   'do' statement 'while' '(' expression ')' ';'
+iterationStatement
+	: 'for' '(' variableDeclaration? ';' expression? ';' expression2? ')' statement		# ForStatement
+	| 'for' '(' singleVariableDeclaration 'of' assignmentExpression ')' statement		# ForOfStatement
+    | 'while' '(' expression ')' statement										# WhileStatement
+    | 'do' statement 'while' '(' expression ')' ';'								# DoWhileStatement
 //    |   'for' '(' expression? ';' expression? ';' expression? ')' statement
 //    |   'for' '(' declaration expression? ';' expression? ')' statement
-//    ;
+    ;
 
-//jumpStatement
+jumpStatement
+	: 'break' ';'
 //    :   'goto' Identifier ';'
-//    |   'continue' ';'
-//    |   'break' ';'
-//    |   'return' expression? ';'
+    |   'continue' ';'
+    |   'return' expression? ';'
 //    |   'goto' unaryExpression ';' // GCC extension
-//    ;
+    ;
 
 blockItemList
     :   blockItem
@@ -237,11 +294,16 @@ blockItem
     |   statement
     ;
 
+arrayConstant
+	: '[' expressionList? ']'
+	;
 
 constant
     : IntegerConstant
 	| FloatConstant
 	| BooleanConstant
+	| arrayConstant
+	| ObjectConstant
     ;
 
 ///////////////////////////////////////////////////////////////////
@@ -256,6 +318,10 @@ FloatConstant
 
 BooleanConstant
 	: 'true' | 'false'
+	;
+
+ObjectConstant
+	: 'null'
 	;
 
 NUMBER
