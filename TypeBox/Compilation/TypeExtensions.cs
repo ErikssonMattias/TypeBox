@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -81,6 +82,20 @@ namespace TypeBox.Compilation
             }
 
             return friendlyName;
+        }
+
+        public static bool IsDelegate(this Type type)
+        {
+            return type.IsSubclassOf(typeof (Delegate));
+        }
+
+        public static DelegateInfo GetDelegate(this Type type)
+        {
+            MethodInfo method = type.GetMethod("Invoke");
+
+            var result = new DelegateInfo(method.ReturnType, method.GetParameters().Select(x => x.ParameterType));
+
+            return result;
         }
     }
 }

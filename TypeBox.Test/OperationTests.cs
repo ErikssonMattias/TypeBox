@@ -44,8 +44,6 @@ SubEnv?.SetKalle(5);
 ");
 
             code(env);
-
-            Assert.AreEqual(null, env.ObjectInstance);
         }
     }
 }

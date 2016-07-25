@@ -60,6 +60,7 @@
     <Compile Include="..\TypeBox.ParserGenerator\obj\Debug\TypeBoxVisitor.cs">
       <Link>ParserBase\TypeBoxVisitor.cs</Link>
     </Compile>
+    <Compile Include="Compilation\DelegateInfo.cs" />
     <Compile Include="Compilation\EnvironmentScope.cs" />
     <Compile Include="Compilation\Extensions.cs" />
     <Compile Include="Compilation\ParseTreeExtensions.cs" />

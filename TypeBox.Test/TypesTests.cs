@@ -78,5 +78,21 @@ ObjectInstance = hej;
             var subEnv = env.ObjectInstance as SubEnvironment;
             Assert.AreEqual(6, subEnv.Kalle);
         }
+
+        [TestMethod]
+        public void StringType()
+        {
+            DefaultTestEnvironment env = new DefaultTestEnvironment {StringVar = null };
+            
+            var code = _typeBoxScriptEngine.Compile<DefaultTestEnvironment>(new[] { typeof(SubEnvironment) }, @"
+
+var str : string = 'Kalle';
+
+StringVar = str + ""Nisse"";
+");
+
+            code(env);
+            Assert.AreEqual("KalleNisse", env.StringVar);
+        }
     }
 }

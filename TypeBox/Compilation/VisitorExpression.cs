@@ -38,8 +38,23 @@ namespace TypeBox.Compilation
             return IsIntegerType(type) || IsFloatType(type);
         }
 
+        private Expression VisitCastAssignmentExpression(Type expectedType,
+            TypeBoxParser.AssignmentExpressionContext context)
+        {
+            _expectedTypeStack.Push(expectedType);
+            var exp = CastAssignment(expectedType, VisitAssignmentExpression(context));
+            _expectedTypeStack.Pop();
+            return exp;
+        }
+        
         private Expression CastAssignment(Type leftType, Expression right)
         {
+            // If we don't expect a specific type we return the expression directly
+            if (leftType == null)
+            {
+                return right;
+            }
+
             if (leftType == right.Type)
             {
                 return right;
@@ -49,7 +64,7 @@ namespace TypeBox.Compilation
             {
                 return Expression.Convert(right, leftType);
             }
-
+            
             // "Array"/List conversions (only works woth 1 dimensional lists at the moment)
             if (EnumerationConverter.IsAssignableEnumeration(leftType) && right.Type.ImplementsIEnumerable())
             {
@@ -120,24 +135,24 @@ namespace TypeBox.Compilation
             //    return Expression.Lambda(block, parameters);
             //}
 
-            return GetLambdaExpression(context.compoundStatement(), context.typeSpecifier(), context.initDeclaratorList(), null);
+            return GetLambdaExpression(_expectedTypeStack.Peek(), context.compoundStatement(), context.typeSpecifier(), context.initDeclaratorList(), null);
         }
 
         public override Expression VisitNewExpression(TypeBoxParser.NewExpressionContext context)
         {
             var type = GetTypeFromTypeSpecifier(context.typeSpecifier());
-            
-            var argumentList = GetArgumentExpressionList(context.argumentExpressionList());
+
+            var argumentList = GetArgumentExpressionList(context.argumentExpressionList(), null);
             var typeArray = argumentList.Select(x => x.Type).ToArray();
 
             var constructorInfo = type.GetConstructor(typeArray);
 
-            if (constructorInfo != null)
+            if (constructorInfo == null)
             {
-                return Expression.New(constructorInfo, argumentList);
+                throw new TypeBoxCompileException($"Could not find a matching constructor for type {type}");
             }
-
-            throw new TypeBoxCompileException($"Could not find a matching constructor for type {type}");
+            
+            return Expression.New(constructorInfo, argumentList);
         }
 
         public override Expression VisitPrimaryExpression(TypeBoxParser.PrimaryExpressionContext context)
@@ -185,32 +200,80 @@ namespace TypeBox.Compilation
 
             var methodInfosExpression = func as MethodInfosExpression;
 
-            if (methodInfosExpression != null)
+            if (methodInfosExpression == null)
             {
-                // If a function in the root of an environment is called, it will be disguised as a fonction call
-
-                var argumentList = GetArgumentExpressionList(context.argumentExpressionList()).ToArray();
-                
-                var methodInfos = methodInfosExpression.MethodInfos.ToArray();
-
-                if (methodInfos.Length > 1)
+                if (context.typeSpecifierList() != null)
                 {
-                    throw new TypeBoxCompileException($"Does not support overloaded method calling at the moment.");
-                }
-                
-                var methodInfo = methodInfos[0].MethodInfo;
-                var instance = methodInfos[0].Instance;
-
-                var parameterInfo = methodInfo.GetParameters();
-                for (int i = 0; i < argumentList.Length; i++)
-                {
-                    argumentList[i] = CastAssignment(parameterInfo[i].ParameterType, argumentList[i]);
+                    throw new TypeBoxCompileException("Lambda invocation cannot contain generic parameters.");
                 }
 
-                return Expression.Call(instance, methodInfo, argumentList);
+                IList<Type> paramTypes = null;
+                if (func.Type.IsDelegate())
+                {
+                    paramTypes = func.Type.GetDelegate().ParameterTypes.ToList();
+                }
+
+                var invocationExpression = Expression.Invoke(func, GetArgumentExpressionList(context.argumentExpressionList(), paramTypes));
+
+                if (_settings.NullSafeFunctionCalls || context.GetChild(1).GetText() == "?")
+                {
+                    return Expression.Condition(
+                        Expression.ReferenceNotEqual(func, Expression.Constant(null)),
+                        invocationExpression,
+                        Expression.Default(invocationExpression.Type));
+                }
+
+                return invocationExpression;
+            }
+
+            // If a function in the root of an environment is called, it will be disguised as a fonction call
+
+            var methodInfos = methodInfosExpression.MethodInfos.ToArray();
+
+            if (methodInfos.Length != 1)
+            {
+                throw new TypeBoxCompileException("Does not support overloaded method calling at the moment.");
+            }
+
+            var methodInfo = methodInfos[0].MethodInfo;
+            var instance = methodInfos[0].Instance;
+
+            if (methodInfo.IsGenericMethodDefinition)
+            {
+                if (context.typeSpecifierList() == null)
+                {
+                    throw new TypeBoxCompileException("Generic method expects generic parameters.");
+                }
+
+                var types = GetTypeListFromTypeSpecifierList(context.typeSpecifierList());
+
+                if (methodInfo.GetGenericArguments().Length != types.Count)
+                {
+                    throw new TypeBoxCompileException($"Generic parameter count does not match. Expected {methodInfo.GetGenericArguments().Length} but got {types.Count}");
+                }
+
+                methodInfo = methodInfo.MakeGenericMethod(types.ToArray());
+            }
+
+            var argumentList = GetArgumentExpressionList(context.argumentExpressionList(), methodInfo.GetParameters().Select(x => x.ParameterType).ToList()).ToArray();
+            
+            for (int i = 0; i < argumentList.Length; i++)
+            {
+                argumentList[i] = argumentList[i];
             }
             
-            return Expression.Invoke(func, GetArgumentExpressionList(context.argumentExpressionList()));
+            var methodCallExpression = Expression.Call(instance, methodInfo, argumentList);
+
+            if (_settings.NullSafeFunctionCalls)
+            {
+                return Expression.Condition(
+                    Expression.ReferenceNotEqual(instance, Expression.Constant(null)),
+                    methodCallExpression,
+                    Expression.Default(methodInfo.ReturnType)
+                    );
+            }
+            
+            return methodCallExpression;
         }
 
         public override Expression VisitMemberAccessExpression(TypeBoxParser.MemberAccessExpressionContext context)
@@ -298,16 +361,24 @@ namespace TypeBox.Compilation
         //    return Expression.Call(instance, methodInfo, argumentList);
         //}
         
-        public IList<Expression> GetArgumentExpressionList(TypeBoxParser.ArgumentExpressionListContext context)
+        public IList<Expression> GetArgumentExpressionList(TypeBoxParser.ArgumentExpressionListContext context, IList<Type> expectedTypes)
         {
             if (context == null)
             {
                 return new List<Expression>();
             }
 
-            var argumentList = context.argumentExpressionList() != null ? GetArgumentExpressionList(context.argumentExpressionList()) : new List<Expression>();
+            Type expectedType = null;
 
-            argumentList.Add(Visit(context.assignmentExpression()));
+            if (expectedTypes != null)
+            {
+                expectedType = expectedTypes[expectedTypes.Count - 1];
+            }
+
+            var argumentList = context.argumentExpressionList() != null ? GetArgumentExpressionList(context.argumentExpressionList(), expectedTypes) : new List<Expression>();
+            
+            argumentList.Add(VisitCastAssignmentExpression(expectedType, context.assignmentExpression()));
+            
             return argumentList;
         }
 
@@ -384,22 +455,35 @@ namespace TypeBox.Compilation
 
         public override Expression VisitAdditiveExpression(TypeBoxParser.AdditiveExpressionContext context)
         {
+            var right = Visit(context.multiplicativeExpression());
+
             if (context.additiveExpression() != null)
             {
                 IParseTree oper = context.GetChild(1);
 
+                var left = Visit(context.additiveExpression());
                 switch (oper.GetText())
                 {
                     case "+":
-                        return Expression.Add(Visit(context.additiveExpression()), Visit(context.multiplicativeExpression()));
+                        if ((left.Type == typeof (string)) && (right.Type == typeof (string)))
+                        {
+                            // TODO: Low prio: Fix so str1 + str2 + str3 only results in one call to string.Concat
+                            var method = typeof (string)
+                                .GetMethods(BindingFlags.Static | BindingFlags.Public).FirstOrDefault(x => (x.Name == "Concat") && (x.GetParameters().Length == 2));
+                            if (method != null)
+                            {
+                                return Expression.Call(method, left, right);
+                            }
+                        }
+                        return Expression.Add(left, right);
                     case "-":
-                        return Expression.Subtract(Visit(context.additiveExpression()), Visit(context.multiplicativeExpression()));
+                        return Expression.Subtract(left, right);
                 }
 
                 throw new NotSupportedException("Not a supported addative operator");
             }
 
-            return Visit(context.multiplicativeExpression());
+            return right;
         }
 
         public override Expression VisitShiftExpression(TypeBoxParser.ShiftExpressionContext context)
@@ -530,70 +614,104 @@ namespace TypeBox.Compilation
 
         public override Expression VisitAssignmentExpression(TypeBoxParser.AssignmentExpressionContext context)
         {
-            if (context.assignmentOperator() != null)
+            if (context.assignmentOperator() == null)
             {
-                var oper = context.GetChild(1).GetText();
-
-                Expression left = Visit(context.unaryExpression());
-                Expression right = Visit(context.assignmentExpression());
-
-                if ((left is TypeBoxExpression) && !(left is EventInfoExpression))
-                {
-                    throw new TypeBoxCompileException("Cannot assign to member of that type.");
-                }
-
-                var eventInfoExpression = left as EventInfoExpression;
-
-                switch (oper)
-                {
-                    case "+=":
-                        if (eventInfoExpression != null)
-                        {
-                            return Expression.Call(eventInfoExpression.Instance, eventInfoExpression.EventInfo.AddMethod, right);
-                        }
-
-                        return Expression.AddAssign(left, right);
-
-                    case "-=":
-                        if (eventInfoExpression != null)
-                        {
-                            return Expression.Call(eventInfoExpression.Instance, eventInfoExpression.EventInfo.RemoveMethod, right);
-                        }
-
-                        return Expression.SubtractAssign(left, right);
-                }
-
-                if (left is TypeBoxExpression)
-                {
-                    throw new TypeBoxCompileException("Cannot assign to member of that type.");
-                }
-
-                switch (oper)
-                {
-                    case "=":
-                        return Expression.Assign(left, CastAssignment(left.Type, right));
-                    case "*=":
-                        return Expression.MultiplyAssign(left, right);
-                    case "/=":
-                        return Expression.DivideAssign(left, right);
-                    case "%=":
-                        return Expression.ModuloAssign(left, right);
-                    case "<<=":
-                        return Expression.LeftShiftAssign(left, right);
-                    case ">>=":
-                        return Expression.RightShiftAssign(left, right);
-                    case "&=":
-                        return Expression.AndAssign(left, right);
-                    case "^=":
-                        return Expression.ExclusiveOrAssign(left, right);
-                    case "|=":
-                        return Expression.OrAssign(left, right);
-                }
-
-                throw new NotSupportedException("Not a supported assignment operator");
+                return Visit(context.conditionalExpression());
             }
 
-            return Visit(context.conditionalExpression());
+            var oper = context.GetChild(1).GetText();
+
+            Expression left = Visit(context.unaryExpression());
+                
+
+            if ((left is TypeBoxExpression) && !(left is EventInfoExpression))
+            {
+                throw new TypeBoxCompileException("Cannot assign to member of that type.");
+            }
+
+            var eventInfoExpression = left as EventInfoExpression;
+
+            Expression right;
+
+            if (eventInfoExpression != null)
+            {
+                right = VisitCastAssignmentExpression(eventInfoExpression.EventInfo.EventHandlerType,
+                    context.assignmentExpression());
+
+                if (oper == "+=")
+                {
+                    return Expression.Call(eventInfoExpression.Instance, eventInfoExpression.EventInfo.AddMethod,
+                        right);
+                }
+
+                if (oper == "-=")
+                {
+                    return Expression.Call(eventInfoExpression.Instance, eventInfoExpression.EventInfo.RemoveMethod,
+                        right);
+                }
+            }
+
+            //switch (oper)
+            //{
+            //    case "+=":
+            //        if (eventInfoExpression != null)
+            //        {
+            //            _expectedTypeStack.Push(eventInfoExpression.EventInfo.EventHandlerType);
+            //            right = Visit(context.assignmentExpression());
+            //            _expectedTypeStack.Pop();
+
+            //            return Expression.Call(eventInfoExpression.Instance, eventInfoExpression.EventInfo.AddMethod, right);
+            //        }
+
+            //        return Expression.AddAssign(left, Visit(context.assignmentExpression()));
+
+            //    case "-=":
+            //        if (eventInfoExpression != null)
+            //        {
+            //            _expectedTypeStack.Push(eventInfoExpression.EventInfo.EventHandlerType);
+            //            right = Visit(context.assignmentExpression());
+            //            _expectedTypeStack.Pop();
+
+            //            return Expression.Call(eventInfoExpression.Instance, eventInfoExpression.EventInfo.RemoveMethod, right);
+            //        }
+
+            //        return Expression.SubtractAssign(left, Visit(context.assignmentExpression()));
+            //}
+
+            if (left is TypeBoxExpression)
+            {
+                throw new TypeBoxCompileException("Cannot assign to member of that type.");
+            }
+                
+            right = VisitCastAssignmentExpression(left.Type, context.assignmentExpression());
+
+            switch (oper)
+            {
+                case "=":
+                    return Expression.Assign(left, right);
+                case "+=":
+                    return Expression.AddAssign(left, right);
+                case "-=":
+                    return Expression.SubtractAssign(left, right);
+                case "*=":
+                    return Expression.MultiplyAssign(left, right);
+                case "/=":
+                    return Expression.DivideAssign(left, right);
+                case "%=":
+                    return Expression.ModuloAssign(left, right);
+                case "<<=":
+                    return Expression.LeftShiftAssign(left, right);
+                case ">>=":
+                    return Expression.RightShiftAssign(left, right);
+                case "&=":
+                    return Expression.AndAssign(left, right);
+                case "^=":
+                    return Expression.ExclusiveOrAssign(left, right);
+                case "|=":
+                    return Expression.OrAssign(left, right);
+            }
+
+            throw new NotSupportedException("Not a supported assignment operator");
         }
 
         public override Expression VisitExpression(TypeBoxParser.ExpressionContext context)
@@ -643,12 +761,27 @@ namespace TypeBox.Compilation
                 {
                     return Expression.Constant(_emptyArray);
                 }
-                
             }
 
             if (context.ObjectConstant() != null)
             {
                 return Expression.Constant(null);
+            }
+
+            if (context.StringConstant() != null)
+            {
+                var str = context.StringConstant().GetText();
+
+                if (str.StartsWith("'"))
+                {
+                    str = str.Trim('\'');
+                }
+                else
+                {
+                    str = str.Trim('"');
+                }
+
+                return Expression.Constant(str);
             }
 
             throw new NotSupportedException("Constant type is not supported");

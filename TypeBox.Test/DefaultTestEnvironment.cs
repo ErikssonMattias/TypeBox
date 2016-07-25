@@ -35,6 +35,7 @@ namespace TypeBox.Test
         public float FloatVar;
         public double DoubleVar;
         public bool BoolVar;
+        public string StringVar;
 
         public int Result;
 
@@ -67,6 +68,16 @@ namespace TypeBox.Test
         public void FireEventWithInt(int i)
         {
             EventWithInt?.Invoke(i);
+        }
+
+        public void SetResultGeneric<T>(T v)
+        {
+            Result = int.Parse(v.ToString());
+        }
+
+        public void SetStringGeneric2<T1, T2>(T1 v1, T2 v2)
+        {
+            StringVar = v1.ToString() + " " + v2.ToString();
         }
     }
 #pragma warning restore 0169

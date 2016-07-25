@@ -111,6 +111,10 @@ namespace TypeBox.Run
 
             d = f;
             Console.WriteLine(2*d);
+
+            IList<Type> l = new List<Type>();
+            var gw = typeof (List<>);
+            
         }
     }
 }

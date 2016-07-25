@@ -219,5 +219,33 @@ EventWithInt += (hej : int) : void => { Result = hej; };
 
             Assert.AreEqual(8, environment.Result);
         }
+
+        [TestMethod]
+        public void CallFunctionWithGenericParameters()
+        {
+            var environment = new DefaultTestEnvironment { Result = 0 };
+            _typeBoxScriptEngine.Execute(@"
+
+SetResultGeneric<int>(45);
+"
+            , environment);
+
+            
+            Assert.AreEqual(45, environment.Result);
+        }
+
+        [TestMethod]
+        public void CallFunctionWithTwoGenericParameters()
+        {
+            var environment = new DefaultTestEnvironment { Result = 0 };
+            _typeBoxScriptEngine.Execute(@"
+
+SetStringGeneric2<int, string>(42, 'nisse');
+"
+            , environment);
+
+
+            Assert.AreEqual("42 nisse", environment.StringVar);
+        }
     }
 }

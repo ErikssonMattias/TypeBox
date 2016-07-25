@@ -10,5 +10,7 @@ namespace TypeBox.Compilation
 
         public bool NullSafeMemberAccess = false;
         public bool NullSafeMemberAccessOperator = true;
+
+        public bool NullSafeFunctionCalls = true;
     }
 }

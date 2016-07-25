@@ -16,6 +16,7 @@ namespace TypeBox.Compilation
         private readonly Stack<LabelTarget> _breakStack = new Stack<LabelTarget>();
         private readonly Stack<LabelTarget> _continueStack = new Stack<LabelTarget>();
         private readonly Stack<LabelTarget> _returnStack = new Stack<LabelTarget>();
+        private readonly Stack<Type> _expectedTypeStack = new Stack<Type>();
 
         public Visitor(IScope scope)
         {
@@ -341,9 +342,9 @@ namespace TypeBox.Compilation
                     return Expression.Continue(_continueStack.Peek());
 
                 case "return":
-                    if (context.expression() != null)
+                    if (context.assignmentExpression() != null)
                     {
-                        return Expression.Return(_returnStack.Peek(), CastAssignment(_returnStack.Peek().Type, Visit(context.expression())));
+                        return Expression.Return(_returnStack.Peek(), VisitCastAssignmentExpression(_returnStack.Peek().Type, context.assignmentExpression()));
                     }
 
                     return Expression.Return(_returnStack.Peek());
@@ -395,6 +396,8 @@ namespace TypeBox.Compilation
                         return _settings.NumberType;
                     case "Array":
                         return typeof (TypeBoxArray<>);
+                    case "string":
+                        return typeof(string);
                 }
             }
 
@@ -459,67 +462,58 @@ namespace TypeBox.Compilation
             return Visit(context.assignmentExpression());
         }
 
-        public override Expression VisitInitDeclarator(TypeBoxParser.InitDeclaratorContext context)
+        //public override Expression VisitInitDeclarator(TypeBoxParser.InitDeclaratorContext context)
+        //{
+        //    Expression initializerExpression;
+        //    ParameterExpression varExpression;
+        //    GetInitDeclarator(context, out varExpression, out initializerExpression);
+
+        //    if (initializerExpression != null)
+        //    {
+        //        return Expression.Assign(varExpression, CastAssignment(varExpression.Type, initializerExpression));
+        //    }
+
+        //    return Expression.Empty();
+        //}
+
+        public void GetInitDeclarator(TypeBoxParser.InitDeclaratorContext context, out ParameterSpacification specification)
         {
-            Expression initializerExpression;
-            ParameterExpression varExpression;
-            GetInitDeclarator(context, out varExpression, out initializerExpression);
-
-            if (initializerExpression != null)
-            {
-                return Expression.Assign(varExpression, CastAssignment(varExpression.Type, initializerExpression));
-            }
-
-            return Expression.Empty();
-        }
-
-        public void GetInitDeclarator(TypeBoxParser.InitDeclaratorContext context, out ParameterExpression varExpression, out Expression initializerExpression)
-        {
-            if ((context.typeSpecifier() == null) && (context.initializer() == null))
-            {
-                throw new TypeBoxCompileException("Variable types must be either implicitly specified or explicitly by assignment (at this point)");
-            }
-
-            initializerExpression = null;
-            Type type;
-
+            specification = new ParameterSpacification {Name = context.declarator().NAME().GetText()};
+            
             if (context.typeSpecifier() != null)
             {
-                type = GetTypeFromTypeSpecifier(context.typeSpecifier());
+                specification.Type = GetTypeFromTypeSpecifier(context.typeSpecifier());
 
                 if (context.initializer() != null)
                 {
-                    initializerExpression = Visit(context.initializer());
+                    specification.InitializerExpression = VisitCastAssignmentExpression(specification.Type, context.initializer().assignmentExpression());
                 }
+
+                return;
             }
-            else // If we don't have a type specified we must have an initializer
+
+            // If we don't have a type specified we must have an initializer
+            if (context.initializer() != null)
             {
-                initializerExpression = Visit(context.initializer());
-
-                type = initializerExpression.Type;
+                specification.InitializerExpression = VisitCastAssignmentExpression(null, context.initializer().assignmentExpression());
+                specification.Type = specification.InitializerExpression.Type;
             }
-
-            if (type == null)
-            {
-                throw new TypeBoxCompileException("Invalid or missing type specifier");
-            }
-
-            varExpression = _scope.CreateLocalVariable(context.declarator().NAME().GetText(), type);
         }
 
-        private class ParameterInitializerPair
+        public class ParameterSpacification
         {
-            public ParameterExpression ParameterExpression;
+            public string Name;
+            public Type Type;
             public Expression InitializerExpression;
         }
 
-        private IList<ParameterInitializerPair> GetInitDeclaratorList(TypeBoxParser.InitDeclaratorListContext context)
+        private IList<ParameterSpacification> GetInitDeclaratorList(TypeBoxParser.InitDeclaratorListContext context)
         {
-            var declaratorList = context.initDeclaratorList() != null ? GetInitDeclaratorList(context.initDeclaratorList()) : new List<ParameterInitializerPair>();
+            var declaratorList = context.initDeclaratorList() != null ? GetInitDeclaratorList(context.initDeclaratorList()) : new List<ParameterSpacification>();
 
-            var pair = new ParameterInitializerPair();
-            GetInitDeclarator(context.initDeclarator(), out pair.ParameterExpression, out pair.InitializerExpression);
-            declaratorList.Add(pair);
+            ParameterSpacification parameterSpacification;
+            GetInitDeclarator(context.initDeclarator(), out parameterSpacification);
+            declaratorList.Add(parameterSpacification);
             return declaratorList;
         }
 
@@ -527,35 +521,86 @@ namespace TypeBox.Compilation
         {
             var lambdaName = context.NAME().GetText();
 
-            var lambda = GetLambdaExpression(context.compoundStatement(), context.typeSpecifier(), context.initDeclaratorList(), lambdaName);
+            var lambda = GetLambdaExpression(null, context.compoundStatement(), context.typeSpecifier(), context.initDeclaratorList(), lambdaName);
 
             var variable = _scope.CreateLocalVariable(lambdaName, lambda.Type);
 
             return Expression.Assign(variable, lambda);
         }
 
-        private LambdaExpression GetLambdaExpression(TypeBoxParser.CompoundStatementContext compoundStatementContext, TypeBoxParser.TypeSpecifierContext typeSpecifierContext, TypeBoxParser.InitDeclaratorListContext initDeclaratorListContext, string lambdaName)
+        private LambdaExpression GetLambdaExpression(Type expectedType, TypeBoxParser.CompoundStatementContext compoundStatementContext, TypeBoxParser.TypeSpecifierContext typeSpecifierContext, TypeBoxParser.InitDeclaratorListContext initDeclaratorListContext, string lambdaName)
         {
             // TODO: Take care of default values in parameter list
-            IList<ParameterExpression> parameters;
+            IList<ParameterSpacification> parameterSpacifications;
             if (initDeclaratorListContext != null)
             {
-                parameters = GetInitDeclaratorList(initDeclaratorListContext)
-                    .Select(x => x.ParameterExpression).ToList();
+                parameterSpacifications = GetInitDeclaratorList(initDeclaratorListContext);
             }
             else
             {
-                parameters = new List<ParameterExpression>();
+                parameterSpacifications = new List<ParameterSpacification>();
             }
 
-            Type returnType = typeof (void);
+            Type returnType = null;
 
             if (typeSpecifierContext != null)
             {
                 returnType = GetTypeFromTypeSpecifier(typeSpecifierContext);
             }
 
-            List<Type> delegateTypes = new List<Type>(parameters.Select(x => x.Type));
+            if (expectedType != null)
+            {
+                // Will must try to match expected type and declared type
+
+                if (!expectedType.IsDelegate())
+                {
+                    throw new TypeBoxCompileException("Trying to declare a lambda that is expected to be of non-delegate type");
+                }
+
+                DelegateInfo delegateInfo = expectedType.GetDelegate();
+
+                if (returnType == null)
+                {
+                    returnType = delegateInfo.ReturnType;
+                }
+                else
+                {
+                    if (delegateInfo.ReturnType != returnType)
+                    {
+                        throw new TypeBoxCompileException("Cannot match lambda expression return type");
+                    }
+                }
+
+                if (parameterSpacifications.Count != delegateInfo.ParameterTypes.Length)
+                {
+                    throw new TypeBoxCompileException("Cannot match lambda expression: parameter count differs");
+                }
+
+                for (int i = 0; i < parameterSpacifications.Count; i++)
+                {
+                    if ((parameterSpacifications[i].Type != null) &&
+                        (parameterSpacifications[i].Type != delegateInfo.ParameterTypes[i]))
+                    {
+                        throw new TypeBoxCompileException($"Cannot match lambda expression: parameter {i} type differs");
+                    }
+
+                    // If type is not specified for some/all parameters we derive it from expected type
+                    parameterSpacifications[i].Type = delegateInfo.ParameterTypes[i];
+                }
+            }
+            
+            // We default to void if no type is specified.
+            if (returnType == null)
+            {
+                returnType = typeof (void);
+            }
+
+            if (parameterSpacifications.Any(x => x.Type == null))
+            {
+                throw new TypeBoxCompileException("Function/lambda parameter types must be specified either explicitly or implicitly");
+            }
+
+            List<Type> delegateTypes = new List<Type>(parameterSpacifications.Select(x => x.Type));
             // The last type argument determines the return type of the delegate.
             delegateTypes.Add(returnType);
             Type delegateType = Expression.GetDelegateType(delegateTypes.ToArray());
@@ -563,6 +608,10 @@ namespace TypeBox.Compilation
             var returnLabel = Expression.Label(returnType);
 
             _returnStack.Push(returnLabel);
+
+            _scope = new Scope(_scope);
+
+            var parameterExpressions = parameterSpacifications.Select(x => _scope.CreateLocalVariable(x.Name, x.Type)).ToArray();
 
             var expressions = Visit(compoundStatementContext);
             LabelExpression labelExpression;
@@ -572,8 +621,7 @@ namespace TypeBox.Compilation
             }
             else
             {
-                labelExpression = Expression.Label(returnLabel,
-                    Expression.Constant(Activator.CreateInstance(returnType)));
+                labelExpression = Expression.Label(returnLabel, Expression.Default(returnType));
             }
 
             var lambda = Expression.Lambda(
@@ -582,7 +630,9 @@ namespace TypeBox.Compilation
                     expressions,
                     labelExpression),
                 lambdaName,
-                parameters);
+                parameterExpressions);
+
+            _scope = _scope.Parent;
             
             _returnStack.Pop();
             
@@ -592,14 +642,21 @@ namespace TypeBox.Compilation
         public override Expression VisitVariableDeclaration(TypeBoxParser.VariableDeclarationContext context)
         {
             // variable declaration and initialization
-            var declarations = GetInitDeclaratorList(context.initDeclaratorList());
+            var parameterSpacifications = GetInitDeclaratorList(context.initDeclaratorList());
 
             List<Expression> initializeExpressions = new List<Expression>();
-            foreach (var pair in declarations)
+            foreach (var parameterSpacification in parameterSpacifications)
             {
-                if (pair.InitializerExpression != null)
+                if (parameterSpacification.Type == null)
                 {
-                    initializeExpressions.Add(Expression.Assign(pair.ParameterExpression, CastAssignment(pair.ParameterExpression.Type, pair.InitializerExpression)));
+                    throw new TypeBoxCompileException("Must specify type for variable");
+                }
+
+                var variableExpression = _scope.CreateLocalVariable(parameterSpacification.Name, parameterSpacification.Type);
+
+                if (parameterSpacification.InitializerExpression != null)
+                {
+                    initializeExpressions.Add(Expression.Assign(variableExpression, parameterSpacification.InitializerExpression));
                 }
             }
 

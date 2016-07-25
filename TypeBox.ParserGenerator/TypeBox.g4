@@ -13,8 +13,8 @@ block
     ;
 
 lambdaExpression
-	: 'function' '(' initDeclaratorList? ')' ':' typeSpecifier compoundStatement
-	| '(' initDeclaratorList? ')' ':' typeSpecifier '=>' compoundStatement
+	: 'function' '(' initDeclaratorList? ')' (':' typeSpecifier)? compoundStatement
+	| '(' initDeclaratorList? ')' (':' typeSpecifier)? '=>' compoundStatement
 	;
 
 functionDeclaration
@@ -37,7 +37,7 @@ primaryExpression
 postfixExpression
     :   primaryExpression											# postfixPrimaryExpression
     |   postfixExpression '[' expression ']'						# arrayPostfixExpression
-    |   postfixExpression '(' argumentExpressionList? ')'			# functionCall
+    |   postfixExpression '?'? ('<' typeSpecifierList '>')? '(' argumentExpressionList? ')'		# functionCall
     |   postfixExpression ('.' | '?.') NAME							# memberAccessExpression
     |   postfixExpression '++'										# postIncrementExpression
     |   postfixExpression '--'										# postDecrementExpression
@@ -280,7 +280,7 @@ jumpStatement
 	: 'break' ';'
 //    :   'goto' Identifier ';'
     |   'continue' ';'
-    |   'return' expression? ';'
+    |   'return' assignmentExpression? ';'
 //    |   'goto' unaryExpression ';' // GCC extension
     ;
 
@@ -304,6 +304,7 @@ constant
 	| BooleanConstant
 	| arrayConstant
 	| ObjectConstant
+	| StringConstant
     ;
 
 ///////////////////////////////////////////////////////////////////
@@ -328,8 +329,12 @@ NUMBER
     : INT | HEX | FLOAT | HEX_FLOAT
     ;
 
-STRING
+StringConstant
+	: '"' NORMALSTRINGCONTENT '"'
+	| '\'' NORMALSTRINGCONTENT '\''
+/*
     : NORMALSTRING | CHARSTRING | LONGSTRING
+*/
     ;
 
 /*
@@ -340,8 +345,9 @@ NAME
     : [a-zA-Z_][a-zA-Z_0-9]*
     ;
 
-NORMALSTRING
-    : '"' ( EscapeSequence | ~('\\'|'"') )* '"' 
+fragment
+NORMALSTRINGCONTENT
+    : ( EscapeSequence | ~('\\'|'"') )*
     ;
 
 CHARSTRING

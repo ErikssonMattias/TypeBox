@@ -67,6 +67,7 @@
     <Compile Include="FunctionTests.cs" />
     <Compile Include="EventTests.cs" />
     <Compile Include="OperationTests.cs" />
+    <Compile Include="LambdaTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\TypeBox\TypeBox.csproj">
